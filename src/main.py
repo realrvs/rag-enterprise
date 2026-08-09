@@ -1,157 +1,138 @@
-"""
-Enterprise RAG Platform — FastAPI Application Entry Point.
-"""
+import os
 
+# 1. Отключаем сетевые проверки Hugging Face (быстрая загрузка из кэша)
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.config import settings
 
-# ==========================================
-#  Logging Configuration
-# ==========================================
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Глобальный синглтон пайплайна (гарантирует доступ из любого потока)
+_pipeline = None
 
-# ==========================================
-#  Pydantic Models
-# ==========================================
+
 class QueryRequest(BaseModel):
-    """Request model for /query endpoint."""
-    question: str = Field(..., description="User question", min_length=1, max_length=10000)
-    context_filter: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata filter")
+    question: str
 
 
 class QueryResponse(BaseModel):
-    """Response model for /query endpoint."""
-    answer: str = Field(..., description="Generated answer")
-    contexts: list = Field(default_factory=list, description="Retrieved contexts")
-    latency_ms: float = Field(..., description="Total latency in milliseconds")
-    from_cache: bool = Field(default=False, description="Whether response came from cache")
-    status: str = Field(default="success", description="Response status")
+    answer: str = ""
+    contexts: List[str] = Field(default_factory=list)
+    latency_ms: float = 0.0
+    from_cache: bool = False
+    status: str = "success"
 
 
-# ==========================================
-#  Lifespan Manager
-# ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager.
-    Initializes resources on startup and cleans up on shutdown.
-    """
-    logger.info("🚀 Starting Enterprise RAG Platform...")
-    logger.info(f"📌 Environment: {settings.environment}")
-    logger.info(f"📌 Log Level: {settings.log_level}")
+    global _pipeline
+    logger.info("=" * 60)
+    logger.info("🚀 Starting Enterprise RAG Platform")
+    logger.info("=" * 60)
     
-    # TODO: Initialize RAG Pipeline here
-    # app.state.pipeline = RAGPipeline()
-    
+    # Выводим конфигурацию, если переменные заданы в settings
+    if hasattr(settings, "ENVIRONMENT"):
+        logger.info(f"📌 Environment: {settings.ENVIRONMENT}")
+    if hasattr(settings, "QDRANT_URL"):
+        logger.info(f"📌 Qdrant URL: {settings.QDRANT_URL}")
+    if hasattr(settings, "QDRANT_COLLECTION_NAME"):
+        logger.info(f"📌 Collection: {settings.QDRANT_COLLECTION_NAME}")
+
+    logger.info("⏳ Initializing RAGPipeline in background thread...")
+    try:
+        from src.pipeline.rag_pipeline import RAGPipeline
+        # Загрузка тяжёлой модели в отдельном потоке, чтобы не блокировать Event Loop
+        _pipeline = await asyncio.to_thread(RAGPipeline)
+        logger.info("✅ RAGPipeline successfully loaded in memory and ready!")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize RAGPipeline: {e}", exc_info=True)
+        _pipeline = None
+        
     yield
     
-    logger.info("🛑 Shutting down Enterprise RAG Platform...")
+    logger.info("🛑 Shutting down server...")
+    _pipeline = None
 
 
-# ==========================================
-#  FastAPI Application
-# ==========================================
 app = FastAPI(
     title="Enterprise RAG Platform",
-    description="Production RAG with SPLADE, Hybrid Search, and Quality Gate",
     version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
 )
 
-# ==========================================
-#  CORS Middleware
-# ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.is_development else ["https://your-domain.com"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ==========================================
-#  Health Check
-# ==========================================
-@app.get(
-    "/health",
-    tags=["System"],
-    summary="Health check endpoint",
-    description="Returns the current health status of the application."
-)
-async def health_check() -> Dict[str, str]:
-    """
-    Health check endpoint.
-    
-    Returns:
-        Dict[str, str]: Health status and environment information.
-    """
+@app.get("/health")
+async def health():
     return {
         "status": "healthy",
-        "environment": settings.environment,
-        "version": "2.0.0"
+        "pipeline_ready": _pipeline is not None
     }
 
 
-# ==========================================
-#  Query Endpoint
-# ==========================================
-@app.post(
-    "/query",
-    response_model=QueryResponse,
-    tags=["RAG"],
-    summary="Query the RAG system",
-    description="Send a question to the RAG pipeline and get an answer with context."
-)
-async def query(request: QueryRequest) -> QueryResponse:
-    """
-    Process a user query through the RAG pipeline.
-    
-    Args:
-        request: QueryRequest with question and optional filter.
-        
-    Returns:
-        QueryResponse: Generated answer with contexts and metadata.
-    """
-    # TODO: Implement RAG pipeline querying
-    # response = await app.state.pipeline.query(
-    #     question=request.question,
-    #     filters=request.context_filter
-    # )
-    
-    # Placeholder response
-    return QueryResponse(
-        answer="RAG pipeline not yet implemented.",
-        contexts=[],
-        latency_ms=0.0,
-        from_cache=False,
-        status="success"
-    )
+@app.get("/ping")
+async def ping():
+    return {"pong": True, "time": time.time()}
 
 
-# ==========================================
-#  Error Handlers
-# ==========================================
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler for unexpected errors."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    raise HTTPException(
-        status_code=500,
-        detail="An internal error occurred. Please try again later."
-    )
+@app.get("/routes")
+async def list_routes():
+    return {"routes": [{"path": r.path, "methods": list(r.methods)} for r in app.routes]}
+
+
+@app.post("/query")
+def query(request: QueryRequest) -> QueryResponse:
+    """
+    Синхронный эндпоинт (def вместо async def).
+    FastAPI автоматически запускает его в ThreadPool, не блокируя веб-сервер.
+    """
+    global _pipeline
+    
+    logger.info("=" * 60)
+    logger.info("🔍 QUERY CALLED!")
+    logger.info(f"📝 Question: {request.question}")
+    logger.info("=" * 60)
+    
+    start = time.time()
+    
+    if _pipeline is None:
+        logger.error("❌ Query received, but _pipeline is None!")
+        return QueryResponse(
+            answer="Pipeline not available. Please check server logs.",
+            status="error"
+        )
+    
+    try:
+        response = _pipeline.query(question=request.question, top_k=3)
+        return QueryResponse(
+            answer=response.get("answer", ""),
+            contexts=response.get("contexts", []),
+            latency_ms=(time.time() - start) * 1000,
+            from_cache=response.get("from_cache", False),
+            status=response.get("status", "success")
+        )
+    except Exception as e:
+        logger.error(f"❌ Error processing query: {e}", exc_info=True)
+        return QueryResponse(
+            answer=f"Error: {str(e)}",
+            status="error"
+        )
