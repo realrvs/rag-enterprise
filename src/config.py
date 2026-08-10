@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     """Application settings."""
     
     # ==========================================
+    # LLM Configuration
+    # ==========================================
+    llm_model: str = "qwen2.5-coder:7b"
+    llm_use_ollama: bool = True
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 512
+    ollama_url: str = "http://localhost:11434"
+
+    # ==========================================
     # OpenAI / LLM
     # ==========================================
     openai_api_key: str
