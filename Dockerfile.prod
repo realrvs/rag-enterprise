@@ -1,0 +1,73 @@
+# ==========================================
+# BUILD STAGE
+# ==========================================
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install system dependencies for building Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry==1.8.3
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies with poetry (including production only)
+RUN poetry config virtualenvs.in-project true && \
+    poetry install --no-interaction --no-ansi --only main --no-root
+
+# ==========================================
+# RUNTIME STAGE
+# ==========================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y \
+    libmagic-dev \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    ghostscript \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 raguser && chown -R raguser:raguser /app
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
+COPY --chown=raguser:raguser src/ ./src/
+COPY --chown=raguser:raguser scripts/ ./scripts/
+COPY --chown=raguser:raguser data/ ./data/
+COPY --chown=raguser:raguser .env.example .env.example
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Switch to non-root user
+USER raguser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application with gunicorn + uvicorn workers
+CMD ["gunicorn", "src.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "120", "--keep-alive", "5"]
