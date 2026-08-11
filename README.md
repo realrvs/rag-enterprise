@@ -8,56 +8,36 @@ Production-ready RAG (Retrieval-Augmented Generation) system with hybrid search,
 
 ```mermaid
 graph TB
-    subgraph "Enterprise RAG Platform"
-        RAG[RAG System]
-    end
-    
-    User[Пользователь] -->|API запросы| RAG
+    User[Пользователь]
+    RAG[RAG System]
+    Admin[Администратор]
+    VectorDB[(Qdrant)]
+    Cache[(Redis)]
+    LLM[Ollama]
+    Observability[Prometheus/Grafana/Jaeger]
+
+    User -->|API запросы| RAG
     RAG -->|Ответы| User
-    
-    Admin[Администратор] -->|Мониторинг| RAG
-    
-    subgraph "Внешние системы"
-        VectorDB[(Qdrant)]
-        Cache[(Redis)]
-        LLM[Ollama]
-        Observability[Prometheus/Grafana/Jaeger]
-    end
-    
+    Admin -->|Мониторинг| RAG
     RAG -->|Векторы| VectorDB
     RAG -->|Кэш| Cache
     RAG -->|Генерация| LLM
     RAG -->|Метрики/Трейсы| Observability
 
 graph TB
-    subgraph "Enterprise RAG Platform"
-        subgraph "Frontend"
-            NGINX[NGINX Reverse Proxy]
-        end
-        
-        subgraph "Application"
-            API[FastAPI Application]
-            Pipeline[RAG Pipeline]
-        end
-        
-        subgraph "Data Layer"
-            Qdrant[(Qdrant Vector Store)]
-            Redis[(Redis Cache)]
-        end
-        
-        subgraph "ML Layer"
-            Ollama[Ollama Local LLM]
-            Embedder[Embedding Factory]
-        end
-        
-        subgraph "Observability"
-            Prometheus[Prometheus Metrics]
-            Grafana[Grafana Dashboards]
-            Jaeger[Jaeger Tracing]
-        end
-    end
-    
-    Client[Клиент] --> NGINX
+    Client[Клиент]
+    NGINX[NGINX Reverse Proxy]
+    API[FastAPI Application]
+    Pipeline[RAG Pipeline]
+    Qdrant[(Qdrant Vector Store)]
+    Redis[(Redis Cache)]
+    Ollama[Ollama Local LLM]
+    Embedder[Embedding Factory]
+    Prometheus[Prometheus Metrics]
+    Grafana[Grafana Dashboards]
+    Jaeger[Jaeger Tracing]
+
+    Client --> NGINX
     NGINX --> API
     API --> Pipeline
     Pipeline --> Qdrant
@@ -69,31 +49,25 @@ graph TB
     Grafana --> Prometheus
     
 graph TB
-    subgraph "FastAPI Application"
-        QueryHandler[Query Handler]
-        HealthHandler[Health Handler]
-        MetricsHandler[Metrics Handler]
-        Pipeline[RAG Pipeline]
-        Config[Config Manager]
-        Middleware[Middleware]
-        Logger[Structured Logger]
-        Metrics[Prometheus Metrics]
-        Tracer[OpenTelemetry Tracer]
-    end
-    
-    subgraph "RAG Pipeline Components"
-        Retriever[Retriever]
-        LLMClient[LLM Client]
-        PromptBuilder[Prompt Builder]
-        EmbeddingFactory[Embedding Factory]
-    end
-    
+    QueryHandler[Query Handler]
+    HealthHandler[Health Handler]
+    MetricsHandler[Metrics Handler]
+    Pipeline[RAG Pipeline]
+    Config[Config Manager]
+    Middleware[Middleware]
+    Logger[Structured Logger]
+    Metrics[Prometheus Metrics]
+    Tracer[OpenTelemetry Tracer]
+    Retriever[Retriever]
+    LLMClient[LLM Client]
+    PromptBuilder[Prompt Builder]
+    EmbeddingFactory[Embedding Factory]
+
     QueryHandler --> Pipeline
     Pipeline --> Retriever
     Pipeline --> LLMClient
     Pipeline --> PromptBuilder
     Pipeline --> EmbeddingFactory
-    
     QueryHandler --> Logger
     QueryHandler --> Metrics
     QueryHandler --> Tracer
@@ -125,18 +99,16 @@ sequenceDiagram
 
 graph TB
     App[FastAPI App]
-    
-    subgraph "Metrics"
-        App -->|/metrics| Prometheus[Prometheus]
-        Prometheus --> Grafana[Grafana]
-    end
-    
-    subgraph "Logging"
-        App -->|JSON| Console[Console]
-        App -->|File| LogFile[logs/app.log]
-    end
-    
-    subgraph "Tracing"
-        App -->|OTLP| Jaeger[Jaeger]
-        Jaeger --> JaegerUI[Jaeger UI]
-    end
+    Prometheus[Prometheus]
+    Grafana[Grafana]
+    Console[Console]
+    LogFile[logs/app.log]
+    Jaeger[Jaeger]
+    JaegerUI[Jaeger UI]
+
+    App -->|/metrics| Prometheus
+    Prometheus --> Grafana
+    App -->|JSON| Console
+    App -->|File| LogFile
+    App -->|OTLP| Jaeger
+    Jaeger --> JaegerUI
