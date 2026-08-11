@@ -5,7 +5,7 @@ Production-ready RAG (Retrieval-Augmented Generation) system with hybrid search,
 ## 🏛️ Архитектура (C4 Model)
 
 ### Уровень 1: Системный контекст
-
+```mermaid
 graph TB
     User[Пользователь]
     RAG[RAG System]
@@ -22,7 +22,9 @@ graph TB
     RAG -->|Кэш| Cache
     RAG -->|Генерация| LLM
     RAG -->|Метрики/Трейсы| Observability
-
+```
+### Уровень 2: Контейнеры
+```mermaid
 graph TB
     Client[Клиент]
     NGINX[NGINX Reverse Proxy]
@@ -46,7 +48,9 @@ graph TB
     API --> Prometheus
     API --> Jaeger
     Grafana --> Prometheus
-    
+```
+### Уровень 3: Компоненты
+```mermaid    
 graph TB
     QueryHandler[Query Handler]
     HealthHandler[Health Handler]
@@ -70,7 +74,9 @@ graph TB
     QueryHandler --> Logger
     QueryHandler --> Metrics
     QueryHandler --> Tracer
-
+```
+### Data Flow
+```mermaid
 sequenceDiagram
     participant Client
     participant API as FastAPI
@@ -95,7 +101,9 @@ sequenceDiagram
     Pipeline-->>API: response
     API->>Obs: Record metrics
     API-->>Client: JSON response
-
+```
+### Observability Stack
+```mermaid
 graph TB
     App[FastAPI App]
     Prometheus[Prometheus]
@@ -111,3 +119,4 @@ graph TB
     App -->|File| LogFile
     App -->|OTLP| Jaeger
     Jaeger --> JaegerUI
+```
