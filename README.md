@@ -6,7 +6,6 @@ Production-ready RAG (Retrieval-Augmented Generation) system with hybrid search,
 
 ### Уровень 1: Системный контекст
 
-```mermaid
 graph TB
     User[Пользователь]
     RAG[RAG System]
